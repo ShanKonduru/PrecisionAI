@@ -1,8 +1,8 @@
 # Agents/PRD_Creator_Agent.py
 
 import os
-import re # Import regex for version number parsing
-from Agents.Base_Agent import BaseAgent # Ensure this import path is correct
+import re
+from Agents.Base_Agent  import BaseAgent
 
 class PRDCreatorAgent(BaseAgent):
     """
@@ -17,8 +17,6 @@ class PRDCreatorAgent(BaseAgent):
         """
         super().__init__(model=model, temperature=temperature, max_tokens=max_tokens)
         self.agent_name = "PRD Creator Agent"
-        # Determine the project root to create the 'output' folder correctly
-        # This assumes PRD_Creator_Agent.py is in Agents/ and output is a sibling of Agents/
         self.project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
         self.output_folder = os.path.join(self.project_root, "output")
         os.makedirs(self.output_folder, exist_ok=True) # Ensure output folder exists on init
@@ -29,17 +27,14 @@ class PRDCreatorAgent(BaseAgent):
         in the output folder. Looks for files like 'PRD_vX.md' and returns X + 1.
         """
         max_version = 0
-        # Iterate over files in the output folder
         for filename in os.listdir(self.output_folder):
-            # Check if the file starts with the document type prefix and ends with .md
             if filename.startswith(f"{document_type}_v") and filename.endswith(".md"):
-                # Use regex to extract the version number
                 match = re.match(rf"{document_type}_v(\d+)\.md", filename)
                 if match:
-                    version = int(match.group(1)) # Convert extracted string to integer
+                    version = int(match.group(1))
                     if version > max_version:
-                        max_version = version # Update max_version if current file has a higher version
-        return max_version + 1 # Return the next available version number
+                        max_version = version
+        return max_version + 1
 
     def _save_document(self, document_content: str, document_type: str, version: int) -> str:
         """
@@ -64,16 +59,18 @@ class PRDCreatorAgent(BaseAgent):
         except IOError as e:
             raise IOError(f"Failed to save document to {filepath}: {e}")
 
-    def generate(self, front_end_reqs: str, middleware_reqs: str, backend_reqs: str, other_details: str) -> tuple[str, str]:
+    # Modified generate method to accept optional previous_feedback
+    def generate(self, front_end_reqs: str, middleware_reqs: str, backend_reqs: str, other_details: str, previous_feedback: str = None) -> tuple[str, str]:
         """
-        Generates a Product Requirements Document (PRD) based on input specifications
-        and saves it to the 'output' folder with automatic versioning.
+        Generates or revises a Product Requirements Document (PRD) based on input specifications
+        and optional previous feedback. Saves it to the 'output' folder with automatic versioning.
 
         Args:
             front_end_reqs (str): Description of front-end requirements.
             middleware_reqs (str): Description of middleware requirements.
             backend_reqs (str): Description of backend requirements.
             other_details (str): Any additional project details or requirements.
+            previous_feedback (str, optional): Feedback from a previous review to incorporate. Defaults to None.
 
         Returns:
             tuple[str, str]: A tuple containing the generated PRD document content
@@ -103,21 +100,28 @@ Your PRD must include, but not be limited to, the following sections. Ensure eac
 6.  **Scope & Exclusions:** Clearly define what is in scope for this version and what is explicitly out of scope.
 7.  **Assumptions & Constraints:** List any assumptions made and known limitations or constraints.
 8.  **Future Considerations/Phases (Optional):** Briefly mention potential future enhancements.
-
-Format the PRD clearly with headings and subheadings for readability. Ensure the language is precise and unambiguous.
 """
+        # Append previous feedback to the system message if provided
+        if previous_feedback:
+            system_message += (
+                f"\n\n**Previous Reviewer Feedback to Incorporate:**\n"
+                f"{previous_feedback}\n\n"
+                f"Please carefully review the previous PRD and the feedback provided. "
+                f"Your task is to generate a *revised* PRD that directly addresses and "
+                f"incorporates all points from the feedback. Focus on improving clarity, "
+                f"completeness, consistency, and feasibility as per the suggestions. "
+                f"Do NOT just append the feedback; *integrate* the changes into the new PRD structure."
+            )
+        else:
+            system_message += (
+                f"\n\nFormat the PRD clearly with headings and subheadings for readability. "
+                f"Ensure the language is precise and unambiguous."
+            )
+
         try:
-            # Call the LLM to generate the PRD content
             generated_prd = self._call_llm(system_message=system_message)
-
-            # Determine the next version number for PRDs
             next_version = self._get_next_version_number("PRD")
-
-            # Save the generated PRD content to a file
             saved_filepath = self._save_document(generated_prd, "PRD", next_version)
-
-            # Return both the content and the file path
             return generated_prd, saved_filepath
         except Exception as e:
-            # Re-raise the exception after printing, allowing main_app.py to catch it
             raise Exception(f"Error from {self.agent_name}: {e}")
