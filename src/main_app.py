@@ -1,17 +1,19 @@
 import os
 import streamlit as st
-from openai import OpenAIError # Specific error class for OpenAI API issues
+from openai import OpenAIError  # Specific error class for OpenAI API issues
 
-import sys # <--- IMPORT sys module
+import sys  # <--- IMPORT sys module
 
 # --- Add the project root to the Python path ---
 # This allows imports like 'from Agents.PRD_Creator_Agent import PRDCreatorAgent'
 # Go up one level from 'src' to 'PrecisionAI'
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+project_root = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), os.pardir))
 sys.path.append(project_root)
 # --- End of path adjustment ---
 
 from Agents.PRD_Creator_Agent import PRDCreatorAgent
+
 
 def main():
     # --- Page Configuration ---
@@ -31,7 +33,7 @@ def main():
 
     st.subheader('💡 Provide Your Application Requirements Below:')
 
-    st.markdown("---") # Separator for visual clarity
+    st.markdown("---")  # Separator for visual clarity
 
     # --- Default Values for Pre-population ---
     # These values elaborate on the "SurveyMonkey-like application"
@@ -89,41 +91,43 @@ def main():
 
         front_end = st.text_area(
             '**Front End:**',
-            value=default_front_end, # Pre-populated value
+            value=default_front_end,  # Pre-populated value
             placeholder="e.g., A responsive web application built with React...",
             help="Describe the user-facing part of your application. Think about the user interface (UI), user experience (UX), and key functionalities users will interact with directly."
         )
 
         middleware = st.text_area(
             '**Middleware:**',
-            value=default_middleware, # Pre-populated value
+            value=default_middleware,  # Pre-populated value
             placeholder="e.g., A Node.js API Gateway handling user requests...",
             help="Explain the services that connect your Front End to your Backend. This often includes APIs, business logic, data processing, authentication layers, and integration with external services."
         )
 
         backend = st.text_area(
             '**Backend:**',
-            value=default_backend, # Pre-populated value
+            value=default_backend,  # Pre-populated value
             placeholder="e.g., A Python-based microservices architecture using Flask...",
             help="Detail the server-side components, databases, and core business logic. Consider data storage, server-side processing, external integrations, and security aspects."
         )
 
-    st.markdown("---") # Another separator
+    st.markdown("---")  # Another separator
 
     with st.container():
         st.markdown("#### Additional Context (Optional but Recommended):")
-        st.warning("The more detail you provide, the more precise our blueprints will be!")
+        st.warning(
+            "The more detail you provide, the more precise our blueprints will be!")
         others = st.text_area(
             '**Other Key Details/Requirements:**',
-            value=default_others, # Pre-populated value
+            value=default_others,  # Pre-populated value
             placeholder="e.g., Target audience, key performance indicators (KPIs)...",
             help="Use this section for any other critical information that doesn't fit neatly into the above categories, such as target users, business goals, security, performance, scalability, or specific compliance needs."
         )
 
-    st.markdown("---") # Final separator
+    st.markdown("---")  # Final separator
 
     # --- Submit Button ---
-    col1, col2, col3 = st.columns([1, 2, 1]) # Use columns to center the button
+    # Use columns to center the button
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button('🚀 Generate My Blueprint!', type="primary"):
             # No need for empty check since fields are pre-populated
@@ -134,35 +138,48 @@ def main():
                 "Other Details": others
             }
 
-            st.success('🎉 Requirements Submitted Successfully! PrecisionAI is now generating your blueprint.')
-            st.info("Please wait while our agents collaborate to create your detailed PRD and WBS.")
+            st.success(
+                '🎉 Requirements Submitted Successfully! PrecisionAI is now generating your blueprint.')
+            st.info(
+                "Please wait while our agents collaborate to create your detailed PRD and WBS.")
 
             with st.spinner('Generating PRD with Agent #2...'):
                 try:
                     # --- Instantiate and run Agent #2 ---
-                    prd_creator = PRDCreatorAgent() # Initialize the agent
-                    generated_prd = prd_creator.generate(
+                    prd_creator = PRDCreatorAgent()  # Initialize the agent
+                    generated_prd, saved_filepath = prd_creator.generate(
                         user_input["Front End"],
                         user_input["Middleware"],
                         user_input["Backend"],
                         user_input["Other Details"]
                     )
-                    st.session_state['generated_prd'] = generated_prd # Store PRD in session state
+
+                    # Store PRD content in session state
+                    st.session_state['generated_prd'] = generated_prd
+                    # Store file path in session state
+                    st.session_state['current_prd_filepath'] = saved_filepath
+                    # Inform the user about the saved file
+                    st.info(f"PRD document saved as: `{saved_filepath}`")
                     st.success("PRD Generation Complete!")
 
-                    st.subheader("Generated Product Requirements Document (PRD):")
-                    st.markdown(generated_prd) # Display the PRD
+                    st.subheader(
+                        "Generated Product Requirements Document (PRD):")
+                    st.markdown(generated_prd)  # Display the PRD
                 except ValueError as ve:
-                    st.error(f"Configuration Error: {ve}. Please ensure OPENAI_API_KEY is set correctly.")
+                    st.error(
+                        f"Configuration Error: {ve}. Please ensure OPENAI_API_KEY is set correctly.")
                 except OpenAIError as oe:
-                    st.error(f"OpenAI API Error: {oe}. Please check your API key and network connection.")
+                    st.error(
+                        f"OpenAI API Error: {oe}. Please check your API key and network connection.")
                 except Exception as e:
-                    st.error(f"An unexpected error occurred during PRD generation: {e}")
-
+                    st.error(
+                        f"An unexpected error occurred during PRD generation: {e}")
 
             st.markdown("---")
             st.subheader("Your Input Summary (for verification):")
-            st.json(user_input) # Display input in a clean JSON format for verification
+            # Display input in a clean JSON format for verification
+            st.json(user_input)
+
 
 if __name__ == '__main__':
     main()
