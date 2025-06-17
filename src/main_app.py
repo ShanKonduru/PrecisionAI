@@ -13,6 +13,7 @@ sys.path.append(project_root)
 # --- End of path adjustment ---
 
 from Agents.PRD_Creator_Agent import PRDCreatorAgent
+from Agents.PRD_Reviewer_Agent import PRDReviewerAgent
 
 
 def main():
@@ -143,6 +144,7 @@ def main():
             st.info(
                 "Please wait while our agents collaborate to create your detailed PRD and WBS.")
 
+            # --- Step 1: Generate PRD with Agent #2 ---
             with st.spinner('Generating PRD with Agent #2...'):
                 try:
                     # --- Instantiate and run Agent #2 ---
@@ -174,6 +176,28 @@ def main():
                 except Exception as e:
                     st.error(
                         f"An unexpected error occurred during PRD generation: {e}")
+
+                st.markdown("---") # Separator between generation and review
+
+                # --- Step 2: Review PRD with Agent #3 (if PRD was generated successfully) ---
+                if generated_prd: # Only proceed if PRD content exists
+                    with st.spinner('Reviewing PRD with Agent #3...'):
+                        try:
+                            prd_reviewer = PRDReviewerAgent()
+                            review_feedback = prd_reviewer.review_prd(generated_prd)
+                            st.session_state['prd_review_feedback'] = review_feedback
+                            st.success("PRD Review Complete!")
+
+                            st.subheader("PRD Reviewer Feedback:")
+                            st.markdown(review_feedback)
+
+                        except ValueError as ve:
+                            st.error(f"Configuration Error: {ve}. Please ensure OPENAI_API_KEY is set correctly.")
+                        except OpenAIError as oe:
+                            st.error(f"OpenAI API Error (Agent #3): {oe}. Please check your API key and network connection.")
+                        except Exception as e:
+                            st.error(f"An unexpected error occurred during PRD review (Agent #3): {e}")
+
 
             st.markdown("---")
             st.subheader("Your Input Summary (for verification):")
