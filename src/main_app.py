@@ -5,18 +5,19 @@ import os
 import sys
 
 # --- Add the project root to the Python path ---
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+project_root = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), os.pardir))
 sys.path.append(project_root)
 # --- End of path adjustment ---
 
-# Import your agent classes
-from Agents.Base_Agent  import BaseAgent
-from Agents.PRD_Creator_Agent import PRDCreatorAgent
-from Agents.PRD_Reviewer_Agent import PRDReviewerAgent
+from Agents.Orchestrator_Agent import Orchestrator
 from openai import OpenAIError
 
 # --- Configuration ---
-MAX_ITERATIONS = 3 # Define the maximum rounds of iteration for PRD generation/review
+# MAX_ITERATIONS is now passed to the Orchestrator
+# Define the maximum rounds of iteration for PRD generation/review
+MAX_ITERATIONS = 3
+
 
 def main():
     # --- Page Configuration ---
@@ -116,7 +117,8 @@ def main():
 
     with st.container():
         st.markdown("#### Additional Context (Optional but Recommended):")
-        st.warning("The more detail you provide, the more precise our blueprints will be!")
+        st.warning(
+            "The more detail you provide, the more precise our blueprints will be!")
         others = st.text_area(
             '**Other Key Details/Requirements:**',
             value=default_others,
@@ -137,141 +139,66 @@ def main():
             }
 
             if not any(user_input.values()):
-                st.error("Please provide at least some details in the input fields.")
-                return # Exit if no input
+                st.error(
+                    "Please provide at least some details in the input fields.")
+                return  # Exit if no input
 
-            st.success('🎉 Requirements Submitted Successfully! PrecisionAI is now initiating multi-agent collaboration for your blueprint.')
-            st.info(f"Starting iterative PRD generation and review for up to {MAX_ITERATIONS} rounds...")
+            st.success(
+                '🎉 Requirements Submitted Successfully! PrecisionAI is now initiating multi-agent collaboration for your blueprint.')
+            st.info(
+                f"Starting iterative PRD generation and review for up to {MAX_ITERATIONS} rounds (handled by Orchestrator)...")
 
-            # Initialize history in session state to store all PRDs and feedbacks
-            if 'prd_orchestration_history' not in st.session_state:
-                st.session_state['prd_orchestration_history'] = []
-            st.session_state['prd_orchestration_history'].clear() # Clear previous runs
+            # Initialize the Orchestrator
+            try:
+                orchestrator = Orchestrator(
+                    max_review_iterations=MAX_ITERATIONS)
+            except Exception as e:
+                st.error(
+                    f"Failed to initialize Orchestrator: {e}. Please check your environment setup (e.g., OPENAI_API_KEY).")
+                return
 
             current_prd_content = None
-            current_feedback = None
+            saved_prd_filepath = None
 
-            # Instantiate agents once outside the loop for efficiency
-            prd_creator = PRDCreatorAgent()
-            prd_reviewer = PRDReviewerAgent()
+            try:
+                # Run the PRD workflow using the Orchestrator
+                with st.spinner('Orchestrating PRD generation and review... This may take a few moments.'):
+                    final_prd_content, final_prd_path = orchestrator.run_prd_workflow(
+                        front_end_reqs=user_input["Front End"],
+                        middleware_reqs=user_input["Middleware"],
+                        backend_reqs=user_input["Backend"],
+                        other_details=user_input["Other Details"]
+                    )
+                st.success('✅ Orchestration Complete!')
+                current_prd_content = final_prd_content
+                saved_prd_filepath = final_prd_path
 
-            for i in range(MAX_ITERATIONS):
-                st.subheader(f"--- Iteration {i + 1} ---")
-
-                # Step 1: Generate/Revise PRD with Agent #2
-                with st.spinner(f'Generating/Revising PRD (Iteration {i + 1}) with Agent #2...'):
-                    try:
-                        # For the first round, just generate. For subsequent, provide feedback.
-                        if i == 0:
-                            current_prd_content, saved_prd_filepath = prd_creator.generate(
-                                user_input["Front End"],
-                                user_input["Middleware"],
-                                user_input["Backend"],
-                                user_input["Other Details"]
-                            )
-                        else:
-                            # Pass all original inputs AND the previous feedback for revision
-                            current_prd_content, saved_prd_filepath = prd_creator.generate(
-                                user_input["Front End"],
-                                user_input["Middleware"],
-                                user_input["Backend"],
-                                user_input["Other Details"],
-                                previous_feedback=current_feedback # Pass the feedback to the generator
-                            )
-
-                        st.success(f"PRD Generation/Revision Complete (Iteration {i + 1})!")
-                        st.info(f"PRD saved as: `{saved_prd_filepath}`")
-                        st.markdown("#### Generated/Revised PRD:")
-                        st.markdown(current_prd_content)
-
-                        # Store this round's PRD in history
-                        st.session_state['prd_orchestration_history'].append({
-                            'iteration': i + 1,
-                            'type': 'PRD',
-                            'content': current_prd_content,
-                            'filepath': saved_prd_filepath
-                        })
-
-                    except ValueError as ve:
-                        st.error(f"Configuration Error: {ve}. Please ensure OPENAI_API_KEY is set correctly.")
-                        break # Stop loop on critical config error
-                    except OpenAIError as oe:
-                        st.error(f"OpenAI API Error (Iteration {i + 1}, Agent #2): {oe}. Stopping iterations.")
-                        break # Stop loop on API error
-                    except IOError as ioe:
-                        st.error(f"File Saving Error (Iteration {i + 1}, Agent #2): {ioe}. Stopping iterations.")
-                        break # Stop loop on file error
-                    except Exception as e:
-                        st.error(f"An unexpected error occurred during PRD generation/revision (Iteration {i + 1}, Agent #2): {e}. Stopping iterations.")
-                        break # Stop loop on any other error
-
-                st.markdown("---")
-
-                # Step 2: Review PRD with Agent #3 (Only if PRD was generated/revised successfully in this iteration)
-                if current_prd_content:
-                    with st.spinner(f'Reviewing PRD (Iteration {i + 1}) with Agent #3...'):
-                        try:
-                            current_feedback = prd_reviewer.generate(current_prd_content) # Call generate for the reviewer
-                            st.success(f"PRD Review Complete (Iteration {i + 1})!")
-                            st.markdown("#### Reviewer Feedback:")
-                            st.markdown(current_feedback)
-
-                            # Store this round's feedback in history
-                            st.session_state['prd_orchestration_history'].append({
-                                'iteration': i + 1,
-                                'type': 'Review Feedback',
-                                'content': current_feedback
-                            })
-
-                        except ValueError as ve:
-                            st.error(f"Configuration Error: {ve}. Please ensure OPENAI_API_KEY is set correctly.")
-                            break
-                        except OpenAIError as oe:
-                            st.error(f"OpenAI API Error (Iteration {i + 1}, Agent #3): {oe}. Stopping iterations.")
-                            break
-                        except Exception as e:
-                            st.error(f"An unexpected error occurred during PRD review (Iteration {i + 1}, Agent #3): {e}. Stopping iterations.")
-                            break
-                else:
-                    st.warning(f"Skipping PRD review for Iteration {i + 1} as no PRD content was generated.")
-                    break # Stop if PRD generation failed
-
-                # Decide whether to continue to the next iteration
-                if i < MAX_ITERATIONS - 1:
-                    st.markdown("---")
-                    st.info(f"Proceeding to Iteration {i + 2} to incorporate feedback...")
-                else:
-                    st.markdown("---")
-                    st.success(f"Orchestration complete after {MAX_ITERATIONS} iterations.")
+            except ValueError as ve:
+                st.error(
+                    f"Configuration Error during orchestration: {ve}. Please ensure OPENAI_API_KEY is set correctly.")
+            except OpenAIError as oe:
+                st.error(f"OpenAI API Error during orchestration: {oe}.")
+            except IOError as ioe:
+                st.error(f"File Saving Error during orchestration: {ioe}.")
+            except Exception as e:
+                st.error(
+                    f"An unexpected error occurred during orchestration: {e}.")
 
             st.markdown("---")
             st.subheader("Final Orchestration Summary:")
 
-            if st.session_state['prd_orchestration_history']:
-                final_prd_entry = next((item for item in reversed(st.session_state['prd_orchestration_history']) if item['type'] == 'PRD'), None)
-                if final_prd_entry:
-                    st.markdown(f"**Final PRD (Iteration {final_prd_entry['iteration']}, Saved to: `{final_prd_entry['filepath']}`):**")
-                    st.markdown(final_prd_entry['content'])
-                else:
-                    st.warning("No PRD was successfully generated during the iterations.")
-
-                st.markdown("### Full Orchestration History:")
-                for item in st.session_state['prd_orchestration_history']:
-                    if item['type'] == 'PRD':
-                        st.markdown(f"**Iteration {item['iteration']} PRD (Saved to: `{item['filepath']}`):**")
-                        with st.expander(f"View PRD Content (Iteration {item['iteration']})"):
-                            st.markdown(item['content'])
-                    elif item['type'] == 'Review Feedback':
-                        st.markdown(f"**Iteration {item['iteration']} Review Feedback:**")
-                        with st.expander(f"View Feedback Content (Iteration {item['iteration']})"):
-                            st.markdown(item['content'])
-                    st.markdown("---") # Separator between history items
+            if current_prd_content:
+                st.markdown(
+                    f"**Final PRD (Saved to: `{saved_prd_filepath}`):**")
+                st.markdown(current_prd_content)
             else:
-                st.warning("No orchestration history available. An error might have occurred early on.")
+                st.warning(
+                    "No PRD was successfully generated by the Orchestrator.")
 
             st.markdown("---")
             st.subheader("Your Original Input Summary:")
             st.json(user_input)
+
 
 if __name__ == '__main__':
     main()
